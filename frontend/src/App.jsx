@@ -3,6 +3,8 @@ import Layout from './components/layout/Layout';
 import SearchBar from './components/search/SearchBar';
 import ProductGrid from './components/products/ProductGrid';
 import SalesChart from './components/analytics/SalesChart';
+import SalesTrendChart from './components/analytics/SalesTrendChart';
+import SeasonalityScoreBadge from './components/analytics/SeasonalityScoreBadge';
 import MetricsCard from './components/analytics/MetricsCard';
 import InsightsPanel from './components/insights/InsightsPanel';
 import ForecastWidget from './components/analytics/ForecastWidget';
@@ -40,6 +42,7 @@ export default function App() {
         page,
         page_size: searchState.pageSize,
         include_sales: true,
+        include_sales_trend: true,
         include_forecast: true,
         include_segments: true
       });
@@ -139,6 +142,18 @@ export default function App() {
             {/* Sales Chart */}
             {results.sales_data && results.sales_data.timeline && (
               <SalesChart data={results.sales_data.timeline} />
+            )}
+
+            {/* Sales Trend Analysis */}
+            {results.sales_trend && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                  <SalesTrendChart salesTrend={results.sales_trend} />
+                </div>
+                <div>
+                  <SeasonalityScoreBadge salesTrend={results.sales_trend} />
+                </div>
+              </div>
             )}
 
             {/* Insights */}

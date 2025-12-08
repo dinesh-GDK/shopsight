@@ -302,6 +302,7 @@ async def health_check(
   "page": 1,
   "page_size": 20,
   "include_sales": true,
+  "include_sales_trend": true,
   "include_forecast": true,
   "include_segments": true,
   "date_range": {
@@ -327,6 +328,7 @@ class SearchRequest(BaseModel):
     page: int = Field(default=1, ge=1, description="Page number (1-indexed)")
     page_size: int = Field(default=20, ge=1, le=100, description="Number of products per page")
     include_sales: bool = Field(default=True, description="Include historical sales data")
+    include_sales_trend: bool = Field(default=True, description="Include sales trend with seasonality analysis")
     include_forecast: bool = Field(default=False, description="Include demand forecast")
     include_segments: bool = Field(default=False, description="Include customer segments")
     date_range: Optional[DateRange] = None
@@ -338,6 +340,7 @@ class SearchRequest(BaseModel):
                 "page": 1,
                 "page_size": 20,
                 "include_sales": True,
+                "include_sales_trend": True,
                 "include_forecast": True,
                 "include_segments": True
             }
@@ -440,6 +443,21 @@ class SalesData(BaseModel):
     timeline: List[SalesDataPoint]
     summary: SalesSummary
 
+class MonthlySalesPoint(BaseModel):
+    month: str
+    sales: int
+
+class DataQuality(BaseModel):
+    months_observed: int
+    sparse_data: bool
+
+class SalesTrendData(BaseModel):
+    article_id: str
+    monthly_sales: List[MonthlySalesPoint]
+    seasonality_score: float
+    peak_months: List[str]
+    data_quality: DataQuality
+
 class Insights(BaseModel):
     text: str
     key_findings: List[str]
@@ -472,6 +490,7 @@ class SearchResponse(BaseModel):
     products: List[Product]
     pagination: PaginationInfo
     sales_data: Optional[SalesData]
+    sales_trend: Optional[SalesTrendData]
     insights: Optional[Insights]
     forecast: Optional[Forecast]
     customer_segments: Optional[List[CustomerSegment]]

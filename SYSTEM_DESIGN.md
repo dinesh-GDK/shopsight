@@ -66,6 +66,17 @@ This is an **internal MVP** designed to demonstrate the feasibility of LLM-power
 - **Priority:** P0 (Must Have)
 - **Implementation:** REAL
 
+#### FR3.5: Sales Trend & Seasonality Analysis
+- **Description:** Compute and visualize monthly sales trends with seasonality scoring
+- **Metrics:** Unit sales by month, seasonality score (peak ratio method), peak months identification
+- **Formula:** `seasonality_score = max(monthly_sales) / mean(monthly_sales)`
+- **Interpretation:**
+  - < 1.5: Low seasonality (flat sales pattern)
+  - 1.5-2.0: Moderate seasonality
+  - > 2.0: Strong seasonality (significant peaks)
+- **Priority:** P0 (Must Have)
+- **Implementation:** REAL
+
 #### FR4: Demand Forecasting
 - **Description:** Predict future sales based on historical patterns
 - **Time Horizon:** Next 1-3 months

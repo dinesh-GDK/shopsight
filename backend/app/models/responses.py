@@ -36,6 +36,27 @@ class SalesData(BaseModel):
     summary: SalesSummary
 
 
+class MonthlySalesPoint(BaseModel):
+    """Monthly sales data point for trend analysis."""
+    month: str
+    sales: int
+
+
+class DataQuality(BaseModel):
+    """Data quality indicators for trend analysis."""
+    months_observed: int
+    sparse_data: bool
+
+
+class SalesTrendData(BaseModel):
+    """Sales trend with seasonality analysis."""
+    article_id: str
+    monthly_sales: List[MonthlySalesPoint]
+    seasonality_score: float
+    peak_months: List[str]
+    data_quality: DataQuality
+
+
 class Insights(BaseModel):
     """AI-generated insights."""
     text: str
@@ -79,6 +100,7 @@ class SearchResponse(BaseModel):
     products: List[Product]
     pagination: PaginationInfo
     sales_data: Optional[SalesData] = None
+    sales_trend: Optional[SalesTrendData] = None
     insights: Optional[Insights] = None
     forecast: Optional[Forecast] = None
     customer_segments: Optional[List[CustomerSegment]] = None

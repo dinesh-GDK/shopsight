@@ -202,6 +202,50 @@ class ProductSearchService:
             logger.error(traceback.format_exc())
             raise
 
+    def get_all_article_ids(
+        self,
+        keywords: List[str],
+        filters: Optional[Dict] = None
+    ) -> List[int]:
+        """
+        Get ALL article IDs matching search criteria (no pagination).
+        Used for analytics calculations that should span all matching products.
+
+        Args:
+            keywords: List of search terms
+            filters: Additional filters
+
+        Returns:
+            List of all matching article IDs
+        """
+        if filters is None:
+            filters = {}
+
+        # Build WHERE clause
+        where_sql, params = self._build_where_clause(keywords, filters)
+
+        query = f"""
+        SELECT article_id
+        FROM read_parquet(?)
+        WHERE {where_sql}
+        """
+
+        try:
+            result = self.db.execute(
+                query,
+                [self.db.config.ARTICLES_PATH] + params
+            )
+
+            article_ids = [row[0] for row in result]
+            logger.info(f"Found {len(article_ids)} total article IDs for analytics")
+            return article_ids
+
+        except Exception as e:
+            logger.error(f"Failed to get all article IDs: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
+
     def get_by_id(self, article_id: int) -> Optional[Product]:
         """
         Get single product by ID.

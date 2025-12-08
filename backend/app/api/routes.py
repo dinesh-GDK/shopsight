@@ -151,13 +151,32 @@ async def search_products(
         has_prev=has_prev
     )
 
-    # Step 3: Get sales data if requested
+    # Step 2b: Get ALL article IDs for analytics (not just current page)
+    # This ensures graphs/analytics stay consistent across pagination
+    all_article_ids = []
+    if total_count > 0 and (request.include_sales or request.include_sales_trend or
+                             request.include_segments):
+        all_article_ids = product_service.get_all_article_ids(
+            keywords=parsed_query.get('keywords', []),
+            filters=parsed_query.get('filters', {})
+        )
+
+    # Step 3: Get sales data if requested (using ALL article IDs)
     sales_data = None
-    if request.include_sales and products:
+    if request.include_sales and all_article_ids:
         sales_service = SalesAnalyzerService(db)
-        article_ids = [p.article_id for p in products]
         sales_data = sales_service.get_sales_history(
-            article_ids=article_ids,
+            article_ids=all_article_ids,
+            date_range=request.date_range
+        )
+
+    # Step 3b: Compute sales trend and seasonality if requested (using ALL article IDs)
+    sales_trend = None
+    if request.include_sales_trend and all_article_ids:
+        if 'sales_service' not in locals():
+            sales_service = SalesAnalyzerService(db)
+        sales_trend = sales_service.compute_sales_trend_and_seasonality(
+            article_ids=all_article_ids,
             date_range=request.date_range
         )
 
@@ -173,12 +192,11 @@ async def search_products(
         forecast_service = ForecasterService()
         forecast = forecast_service.predict(sales_data)
 
-    # Step 6: Get customer segments if requested
+    # Step 6: Get customer segments if requested (using ALL article IDs)
     segments = None
-    if request.include_segments and products:
+    if request.include_segments and all_article_ids:
         segment_service = SegmenterService(db)
-        article_ids = [p.article_id for p in products]
-        segments = segment_service.get_segments(article_ids)
+        segments = segment_service.get_segments(all_article_ids)
 
     # Build response
     processing_time = int((time.time() - start_time) * 1000)
@@ -195,6 +213,7 @@ async def search_products(
         products=products,
         pagination=pagination,
         sales_data=sales_data,
+        sales_trend=sales_trend,
         insights=insights,
         forecast=forecast,
         customer_segments=segments,

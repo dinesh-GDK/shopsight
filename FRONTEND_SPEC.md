@@ -807,6 +807,186 @@ export default function ForecastWidget({ forecast }) {
 }
 ```
 
+#### SalesTrendChart Component
+
+**File:** `src/components/analytics/SalesTrendChart.jsx`
+
+**Purpose:** Display monthly sales trend with unit count visualization
+
+**Props:**
+```typescript
+{
+  salesTrend: {
+    monthly_sales: Array<{ month: string, sales: number }>,
+    data_quality: { months_observed: number, sparse_data: boolean }
+  },
+  title?: string
+}
+```
+
+**Design Specs:**
+- Chart: Bar chart showing monthly unit sales
+- X-axis: Months (rotated -45° for readability)
+- Y-axis: Unit count
+- Colors: Purple theme (#8b5cf6)
+- Data quality badge for sparse data warnings
+- Responsive width
+
+**Implementation:**
+```jsx
+import React from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AlertCircle } from 'lucide-react';
+
+export default function SalesTrendChart({ salesTrend, title = "Sales Trend Analysis" }) {
+  if (!salesTrend || !salesTrend.monthly_sales || salesTrend.monthly_sales.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        {salesTrend.data_quality?.sparse_data && (
+          <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full">
+            Limited Data
+          </span>
+        )}
+      </div>
+
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={salesTrend.monthly_sales}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis
+            dataKey="month"
+            tick={{ fill: '#6b7280', fontSize: 12 }}
+            angle={-45}
+            textAnchor="end"
+            height={80}
+          />
+          <YAxis
+            tick={{ fill: '#6b7280', fontSize: 12 }}
+            label={{ value: 'Units Sold', angle: -90, position: 'insideLeft' }}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: 'white',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px'
+            }}
+          />
+          <Bar dataKey="sales" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+```
+
+#### SeasonalityScoreBadge Component
+
+**File:** `src/components/analytics/SeasonalityScoreBadge.jsx`
+
+**Purpose:** Display seasonality score with color-coded interpretation
+
+**Props:**
+```typescript
+{
+  salesTrend: {
+    seasonality_score: number,
+    peak_months: Array<string>
+  }
+}
+```
+
+**Design Specs:**
+- Color-coded badges:
+  - Green (< 1.5): Low seasonality
+  - Orange (1.5 - 2.0): Moderate seasonality
+  - Red (> 2.0): Strong seasonality
+- Icon indicators based on level
+- Peak month badges
+- Score explanation
+
+**Implementation:**
+```jsx
+import React from 'react';
+import { TrendingUp, Activity, Minus } from 'lucide-react';
+
+export default function SeasonalityScoreBadge({ salesTrend }) {
+  if (!salesTrend || salesTrend.seasonality_score === undefined) {
+    return null;
+  }
+
+  const { seasonality_score, peak_months } = salesTrend;
+
+  const getSeasonalityLevel = (score) => {
+    if (score < 1.5) {
+      return {
+        level: 'Low',
+        color: 'bg-green-50 border-green-200 text-green-700',
+        icon: <Minus className="w-5 h-5" />
+      };
+    } else if (score < 2.0) {
+      return {
+        level: 'Moderate',
+        color: 'bg-orange-50 border-orange-200 text-orange-700',
+        icon: <Activity className="w-5 h-5" />
+      };
+    } else {
+      return {
+        level: 'Strong',
+        color: 'bg-red-50 border-red-200 text-red-700',
+        icon: <TrendingUp className="w-5 h-5" />
+      };
+    }
+  };
+
+  const { level, color, icon } = getSeasonalityLevel(seasonality_score);
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6 h-full">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Seasonality Analysis</h3>
+
+      <div className={`border-2 rounded-lg p-4 mb-4 ${color}`}>
+        <div className="flex items-center space-x-2 mb-2">
+          {icon}
+          <span className="font-semibold text-lg">{level} Seasonality</span>
+        </div>
+        <div className="text-2xl font-bold">
+          {seasonality_score.toFixed(2)}
+        </div>
+        <p className="text-sm mt-2">
+          Peak is {seasonality_score.toFixed(1)}x the average
+        </p>
+      </div>
+
+      {peak_months && peak_months.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-gray-700">Peak Months:</p>
+          <div className="flex flex-wrap gap-2">
+            {peak_months.map((month, index) => (
+              <span
+                key={index}
+                className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-md"
+              >
+                {month}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 pt-4 border-t border-gray-200">
+        <p className="text-xs text-gray-500">
+          <strong>Reference:</strong> 1.0 = flat sales, 2.0+ = strong seasonal pattern
+        </p>
+      </div>
+    </div>
+  );
+}
+```
+
 ---
 
 ### 5. Insights Components
@@ -1178,6 +1358,8 @@ import Layout from './components/layout/Layout';
 import SearchBar from './components/search/SearchBar';
 import ProductGrid from './components/products/ProductGrid';
 import SalesChart from './components/analytics/SalesChart';
+import SalesTrendChart from './components/analytics/SalesTrendChart';
+import SeasonalityScoreBadge from './components/analytics/SeasonalityScoreBadge';
 import MetricsCard from './components/analytics/MetricsCard';
 import InsightsPanel from './components/insights/InsightsPanel';
 import ForecastWidget from './components/analytics/ForecastWidget';
@@ -1215,6 +1397,7 @@ export default function App() {
         page,
         page_size: searchState.pageSize,
         include_sales: true,
+        include_sales_trend: true,
         include_forecast: true,
         include_segments: true
       });
@@ -1314,6 +1497,18 @@ export default function App() {
             {/* Sales Chart */}
             {results.sales_data && results.sales_data.timeline && (
               <SalesChart data={results.sales_data.timeline} />
+            )}
+
+            {/* Sales Trend Analysis */}
+            {results.sales_trend && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                  <SalesTrendChart salesTrend={results.sales_trend} />
+                </div>
+                <div>
+                  <SeasonalityScoreBadge salesTrend={results.sales_trend} />
+                </div>
+              </div>
             )}
 
             {/* Insights */}

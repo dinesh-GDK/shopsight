@@ -4,7 +4,10 @@ from typing import List, Optional, Dict, Any
 from datetime import date
 import pandas as pd
 from app.db.duckdb_client import DuckDBClient
-from app.models.responses import SalesData, SalesDataPoint, SalesSummary
+from app.models.responses import (
+    SalesData, SalesDataPoint, SalesSummary,
+    SalesTrendData, MonthlySalesPoint, DataQuality
+)
 from app.models.requests import DateRange
 from app.utils.logger import logger
 
@@ -162,4 +165,124 @@ class SalesAnalyzerService:
 
         except Exception as e:
             logger.error(f"Failed to get sales summary for {article_id}: {e}")
+            raise
+
+    def compute_sales_trend_and_seasonality(
+        self,
+        article_ids: List[int],
+        date_range: Optional[DateRange] = None
+    ) -> Optional[SalesTrendData]:
+        """
+        Compute monthly sales trend and seasonality score for products.
+
+        Args:
+            article_ids: List of product IDs
+            date_range: Optional date filter
+
+        Returns:
+            SalesTrendData with monthly sales and seasonality analysis, or None if insufficient data
+
+        Seasonality Score Formula:
+            seasonality_score = max(monthly_sales) / mean(monthly_sales)
+            - Score of 1.0 = flat sales (no seasonality)
+            - Score of 1.5-2.0 = moderate seasonality
+            - Score of 2.0+ = strong seasonality
+        """
+        # Build date filter
+        date_filter = "1=1"
+        params = [self.db.config.TRANSACTIONS_PATH]
+
+        if date_range and date_range.start:
+            date_filter += " AND t_dat >= ?"
+            params.append(date_range.start)
+
+        if date_range and date_range.end:
+            date_filter += " AND t_dat <= ?"
+            params.append(date_range.end)
+
+        # Build article filter
+        article_filter = f"article_id IN ({','.join(['?'] * len(article_ids))})"
+        params.extend(article_ids)
+
+        query = f"""
+        SELECT
+            DATE_TRUNC('month', t_dat) as month,
+            COUNT(*) as sales_count
+        FROM read_parquet(?)
+        WHERE {date_filter} AND {article_filter}
+        GROUP BY month
+        ORDER BY month
+        """
+
+        try:
+            # Execute and convert to DataFrame
+            df = self.db.query_to_df(query, params)
+
+            if df.empty:
+                logger.warning(f"No sales data found for trend analysis: {article_ids}")
+                return None
+
+            # Extract monthly sales
+            monthly_sales_list = [
+                MonthlySalesPoint(
+                    month=row['month'].strftime('%Y-%m'),
+                    sales=int(row['sales_count'])
+                )
+                for _, row in df.iterrows()
+            ]
+
+            sales_values = [point.sales for point in monthly_sales_list]
+            months_observed = len(sales_values)
+
+            # Handle edge cases
+            if months_observed == 0:
+                logger.warning("No monthly sales data available")
+                return None
+
+            # Compute seasonality score using peak ratio method
+            peak_sales = max(sales_values)
+            avg_sales = sum(sales_values) / len(sales_values)
+
+            # Avoid division by zero
+            if avg_sales == 0:
+                seasonality_score = 0.0
+            else:
+                seasonality_score = peak_sales / avg_sales
+
+            # Identify peak months
+            peak_months = [
+                point.month for point in monthly_sales_list
+                if point.sales == peak_sales
+            ]
+
+            # Assess data quality
+            sparse_data = months_observed < 3
+
+            data_quality = DataQuality(
+                months_observed=months_observed,
+                sparse_data=sparse_data
+            )
+
+            # Combine article IDs into a single string representation
+            article_id_str = ','.join(map(str, article_ids))
+
+            result = SalesTrendData(
+                article_id=article_id_str,
+                monthly_sales=monthly_sales_list,
+                seasonality_score=round(seasonality_score, 2),
+                peak_months=peak_months,
+                data_quality=data_quality
+            )
+
+            logger.info(
+                f"Computed sales trend for articles {article_id_str}: "
+                f"seasonality_score={seasonality_score:.2f}, "
+                f"peak_months={peak_months}, "
+                f"months_observed={months_observed}"
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to compute sales trend and seasonality: {e}")
             raise

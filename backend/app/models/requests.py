@@ -42,6 +42,10 @@ class SearchRequest(BaseModel):
         default=False,
         description="Include customer segments"
     )
+    include_sales_trend: bool = Field(
+        default=True,
+        description="Include sales trend with seasonality analysis"
+    )
     date_range: Optional[DateRange] = None
 
     class Config:
@@ -51,6 +55,7 @@ class SearchRequest(BaseModel):
                 "page": 1,
                 "page_size": 20,
                 "include_sales": True,
+                "include_sales_trend": True,
                 "include_forecast": True,
                 "include_segments": True
             }
