@@ -1,0 +1,7 @@
+.claude
+
+hm_with_images/*
+
+*.ini
+
+*.env*
