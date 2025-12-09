@@ -5,11 +5,7 @@
 
 **An agentic e-commerce analytics platform that enables natural language product search with AI-powered insights, sales forecasting, and customer segmentation.**
 
-<p align="center">
-  <video src="assets/demo.mp4" controls width="75%">
-    Your browser does not support the video tag.
-  </video>
-</p>
+https://github.com/user-attachments/assets/69b1969c-39a2-428c-8016-a1628a22f5e8
 
 ---
 
