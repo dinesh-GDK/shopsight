@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Layout from './components/layout/Layout';
 import SearchBar from './components/search/SearchBar';
+import ConfidenceSlider from './components/search/ConfidenceSlider';
 import ProductGrid from './components/products/ProductGrid';
 import SalesChart from './components/analytics/SalesChart';
 import SalesTrendChart from './components/analytics/SalesTrendChart';
@@ -20,6 +21,7 @@ export default function App() {
     query: '',
     currentPage: 1,
     pageSize: 20,
+    minConfidence: 0.5, // Default to 50% minimum confidence
     loading: false,
     loadingProducts: false,
     error: null,
@@ -41,6 +43,7 @@ export default function App() {
         query,
         page,
         page_size: searchState.pageSize,
+        min_confidence: searchState.minConfidence, // NEW: Include confidence threshold
         include_sales: true,
         include_sales_trend: true,
         include_forecast: true,
@@ -75,17 +78,36 @@ export default function App() {
     handleSearch(searchState.query, newPage, true); // Pass true to indicate pagination
   };
 
-  const { loading, loadingProducts, error, results } = searchState;
+  const handleConfidenceChange = (newConfidence) => {
+    setSearchState(prev => ({
+      ...prev,
+      minConfidence: newConfidence,
+      currentPage: 1 // Reset to page 1 when filter changes
+    }));
+
+    // Don't automatically search - wait for user to click Search button
+  };
+
+  const { loading, loadingProducts, error, results, minConfidence } = searchState;
 
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Search Section */}
-        <div className="mb-12">
+        <div className="mb-8">
           <SearchBar
             onSearch={handleSearch}
             loading={loading}
             placeholder="Search products using natural language..."
+          />
+        </div>
+
+        {/* Confidence Filter - Always visible */}
+        <div className="max-w-2xl mx-auto mb-8">
+          <ConfidenceSlider
+            value={minConfidence}
+            onChange={handleConfidenceChange}
+            disabled={loading || loadingProducts}
           />
         </div>
 

@@ -3,6 +3,7 @@
 from typing import List, Dict, Optional, Tuple
 from app.db.duckdb_client import DuckDBClient
 from app.models.responses import Product
+from app.services.confidence_scorer import ConfidenceScorer
 from app.utils.logger import logger
 from app.utils.exceptions import ProductNotFoundException
 
@@ -202,6 +203,138 @@ class ProductSearchService:
             logger.error(traceback.format_exc())
             raise
 
+    def search_with_confidence(
+        self,
+        keywords: List[str],
+        parsed_query: Dict,
+        filters: Optional[Dict] = None,
+        page: int = 1,
+        page_size: int = 20,
+        min_confidence: float = 0.0
+    ) -> Tuple[List[Product], int]:
+        """
+        Search products with confidence scoring and filtering.
+
+        Args:
+            keywords: List of search terms
+            parsed_query: Full parsed query with attributes (from LLM)
+            filters: Additional filters
+            page: Page number (1-indexed)
+            page_size: Number of results per page
+            min_confidence: Minimum confidence threshold (0.0-1.0)
+
+        Returns:
+            Tuple of (scored and filtered products, total count after filtering)
+        """
+        if filters is None:
+            filters = {}
+
+        # Build WHERE clause (broader search for candidates)
+        where_sql, params = self._build_where_clause(keywords, filters)
+
+        # Get more candidates than requested (to have enough after filtering)
+        # Limit to max 500 candidates for performance
+        candidate_limit = min(500, page_size * 25)
+
+        query = f"""
+        SELECT
+            article_id,
+            prod_name as name,
+            product_type_name as type,
+            colour_group_name as color,
+            department_name as department,
+            product_group_name,
+            garment_group_name,
+            index_name,
+            perceived_colour_master_name,
+            perceived_colour_value_name,
+            image_url
+        FROM read_parquet(?)
+        WHERE {where_sql}
+        LIMIT ?
+        """
+
+        try:
+            logger.info(f"Searching with confidence scoring. Min confidence: {min_confidence}")
+            logger.info(f"Parsed query attributes: {parsed_query.get('attributes', {})}")
+
+            # Execute query to get candidates
+            result = self.db.execute(
+                query,
+                [self.db.config.ARTICLES_PATH] + params + [candidate_limit]
+            )
+
+            logger.info(f"Got {len(result)} candidate products")
+
+            # Convert to dictionaries for scoring
+            candidates = [
+                {
+                    "article_id": row[0],
+                    "name": row[1],
+                    "type": row[2],
+                    "color": row[3],
+                    "department": row[4],
+                    "product_group_name": row[5],
+                    "garment_group_name": row[6],
+                    "index_name": row[7],
+                    "perceived_colour_master_name": row[8],
+                    "perceived_colour_value_name": row[9],
+                    "image_url": row[10]
+                }
+                for row in result
+            ]
+
+            # Score all candidates
+            scorer = ConfidenceScorer()
+            scored_products = scorer.score_products_batch(candidates, parsed_query)
+
+            # Filter by minimum confidence
+            filtered_products = [
+                p for p in scored_products
+                if p["confidence_score"] >= min_confidence
+            ]
+
+            # Sort by confidence score (descending)
+            filtered_products.sort(key=lambda p: p["confidence_score"], reverse=True)
+
+            logger.info(f"After confidence filtering (>= {min_confidence}): {len(filtered_products)} products")
+
+            # Apply pagination
+            total_count = len(filtered_products)
+            start = (page - 1) * page_size
+            end = start + page_size
+            paginated_products = filtered_products[start:end]
+
+            # Convert to Product objects
+            products = [
+                Product(
+                    article_id=p["article_id"],
+                    name=p["name"],
+                    type=p["type"],
+                    color=p["color"],
+                    department=p["department"],
+                    price_range=None,
+                    image_url=p["image_url"],
+                    confidence_score=p["confidence_score"]
+                )
+                for p in paginated_products
+            ]
+
+            logger.info(f"Returning page {page}: {len(products)} products, total: {total_count}")
+
+            # Log top 5 confidence scores for debugging
+            if products:
+                top_scores = [(p.name, p.confidence_score) for p in products[:5]]
+                logger.info(f"Top 5 confidence scores: {top_scores}")
+
+            return products, total_count
+
+        except Exception as e:
+            logger.error(f"Product search with confidence failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
+
     def get_all_article_ids(
         self,
         keywords: List[str],
@@ -242,6 +375,102 @@ class ProductSearchService:
 
         except Exception as e:
             logger.error(f"Failed to get all article IDs: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
+
+    def get_all_article_ids_with_confidence(
+        self,
+        keywords: List[str],
+        parsed_query: Dict,
+        filters: Optional[Dict] = None,
+        min_confidence: float = 0.0
+    ) -> List[int]:
+        """
+        Get ALL article IDs matching search criteria with confidence filtering.
+        Used for analytics calculations on confidence-filtered results.
+
+        Args:
+            keywords: List of search terms
+            parsed_query: Full parsed query with attributes
+            filters: Additional filters
+            min_confidence: Minimum confidence threshold
+
+        Returns:
+            List of all matching article IDs that pass confidence threshold
+        """
+        if filters is None:
+            filters = {}
+
+        # If no confidence filtering, use faster method
+        if min_confidence == 0.0:
+            return self.get_all_article_ids(keywords, filters)
+
+        # Build WHERE clause
+        where_sql, params = self._build_where_clause(keywords, filters)
+
+        # Get ALL candidates (limit to reasonable number for performance)
+        # For analytics, we'll cap at 1000 products
+        candidate_limit = 1000
+
+        query = f"""
+        SELECT
+            article_id,
+            prod_name as name,
+            product_type_name as type,
+            colour_group_name as color,
+            department_name as department,
+            product_group_name,
+            garment_group_name,
+            index_name,
+            perceived_colour_master_name,
+            perceived_colour_value_name
+        FROM read_parquet(?)
+        WHERE {where_sql}
+        LIMIT ?
+        """
+
+        try:
+            logger.info(f"Getting all article IDs with confidence >= {min_confidence}")
+
+            # Execute query to get candidates
+            result = self.db.execute(
+                query,
+                [self.db.config.ARTICLES_PATH] + params + [candidate_limit]
+            )
+
+            # Convert to dictionaries for scoring
+            candidates = [
+                {
+                    "article_id": row[0],
+                    "name": row[1],
+                    "type": row[2],
+                    "color": row[3],
+                    "department": row[4],
+                    "product_group_name": row[5],
+                    "garment_group_name": row[6],
+                    "index_name": row[7],
+                    "perceived_colour_master_name": row[8],
+                    "perceived_colour_value_name": row[9]
+                }
+                for row in result
+            ]
+
+            # Score and filter
+            scorer = ConfidenceScorer()
+            scored_products = scorer.score_products_batch(candidates, parsed_query)
+
+            # Filter by confidence and extract IDs
+            article_ids = [
+                p["article_id"] for p in scored_products
+                if p["confidence_score"] >= min_confidence
+            ]
+
+            logger.info(f"Found {len(article_ids)} article IDs for analytics after confidence filtering")
+            return article_ids
+
+        except Exception as e:
+            logger.error(f"Failed to get article IDs with confidence: {e}")
             import traceback
             logger.error(traceback.format_exc())
             raise

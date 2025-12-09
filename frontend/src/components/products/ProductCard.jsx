@@ -10,13 +10,56 @@ export default function ProductCard({ product }) {
     color: colour_group_name,
     price_range,
     image_url,
+    confidence_score = 1.0, // Default to perfect score if not provided
   } = product;
+
+  // Get confidence badge styling
+  const getConfidenceBadge = (score) => {
+    if (score >= 0.8) {
+      return {
+        color: 'bg-green-100 text-green-700 border-green-200',
+        label: 'Excellent',
+        icon: '✓'
+      };
+    } else if (score >= 0.6) {
+      return {
+        color: 'bg-blue-100 text-blue-700 border-blue-200',
+        label: 'Good',
+        icon: '●'
+      };
+    } else if (score >= 0.4) {
+      return {
+        color: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+        label: 'Fair',
+        icon: '○'
+      };
+    } else {
+      return {
+        color: 'bg-gray-100 text-gray-600 border-gray-200',
+        label: 'Low',
+        icon: '·'
+      };
+    }
+  };
+
+  const badge = getConfidenceBadge(confidence_score);
 
   return (
     <div className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200
                     hover:scale-[1.02] overflow-hidden cursor-pointer">
       {/* Image */}
       <div className="aspect-[4/3] bg-gray-100 relative">
+        {/* Confidence Badge - Top Right */}
+        <div className="absolute top-2 right-2 z-10">
+          <div
+            className={`px-2 py-1 rounded-full text-xs font-semibold border ${badge.color}
+                       shadow-sm backdrop-blur-sm bg-opacity-95`}
+            title={`Relevance: ${(confidence_score * 100).toFixed(0)}% - ${badge.label} match`}
+          >
+            {(confidence_score * 100).toFixed(0)}%
+          </div>
+        </div>
+
         {image_url && (
           <img
             src={image_url}

@@ -5,7 +5,11 @@ import ollama
 import json
 import pandas as pd
 from typing import Dict, Any, List
-from app.agents.prompts import QUERY_PARSER_PROMPT, INSIGHT_GENERATOR_PROMPT
+from app.agents.prompts import (
+    QUERY_PARSER_PROMPT,
+    ENHANCED_QUERY_PARSER_PROMPT,
+    INSIGHT_GENERATOR_PROMPT
+)
 from app.models.responses import Product, SalesData, Insights
 from app.config import settings
 from app.utils.logger import logger
@@ -96,6 +100,62 @@ class AgentOrchestrator:
             keywords = [word for word in query.split() if len(word) > 2]
             return {
                 "keywords": keywords,
+                "filters": {},
+                "intent": "product_search"
+            }
+
+    async def parse_query_with_attributes(self, query: str) -> Dict[str, Any]:
+        """
+        Parse natural language query with detailed attribute extraction for confidence scoring.
+
+        Args:
+            query: User's search query (e.g., "Nike black jacket")
+
+        Returns:
+            Dict with keywords, attributes (brand, type, color, etc.), filters, and intent
+        """
+        prompt = ENHANCED_QUERY_PARSER_PROMPT.format(query=query)
+
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an advanced query parser for e-commerce search. Extract detailed product attributes. Return only valid JSON."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                options={"temperature": 0.1}
+            )
+
+            # Parse JSON from response
+            content = response['message']['content']
+
+            # Extract JSON if wrapped in markdown code blocks
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+
+            parsed = json.loads(content)
+            logger.info(f"Enhanced parsed query '{query}' into: {parsed}")
+            return parsed
+
+        except Exception as e:
+            logger.warning(f"Enhanced LLM query parsing failed, using fallback: {e}")
+            # Fallback to simple keyword extraction with empty attributes
+            keywords = [word for word in query.split() if len(word) > 2]
+            return {
+                "keywords": keywords,
+                "attributes": {
+                    "brand": None,
+                    "type": None,
+                    "color": None,
+                    "style": None,
+                    "gender": None,
+                    "department": None
+                },
                 "filters": {},
                 "intent": "product_search"
             }

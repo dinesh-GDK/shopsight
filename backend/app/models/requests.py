@@ -30,6 +30,12 @@ class SearchRequest(BaseModel):
         le=100,
         description="Number of products per page"
     )
+    min_confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score for search results (0.0 - 1.0)"
+    )
     include_sales: bool = Field(
         default=True,
         description="Include historical sales data"
@@ -54,6 +60,7 @@ class SearchRequest(BaseModel):
                 "query": "Nike running shoes",
                 "page": 1,
                 "page_size": 20,
+                "min_confidence": 0.5,
                 "include_sales": True,
                 "include_sales_trend": True,
                 "include_forecast": True,

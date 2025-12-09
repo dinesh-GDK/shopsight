@@ -10,7 +10,6 @@ export const API_CONFIG = {
  * Example search queries
  */
 export const EXAMPLE_QUERIES = [
-  'Nike running shoes',
   'Women jackets',
   'Sports equipment',
   'Black dresses',

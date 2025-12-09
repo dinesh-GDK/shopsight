@@ -109,32 +109,37 @@ async def search_products(
     agent: AgentOrchestrator = Depends(get_agent_orchestrator)
 ):
     """
-    Search products using natural language query with pagination.
+    Search products using natural language query with confidence scoring and pagination.
 
     Args:
-        request: Search request with query and options
+        request: Search request with query, min_confidence, and options
         db: DuckDB client (injected)
         agent: LLM agent orchestrator (injected)
 
     Returns:
-        Search response with products, sales data, insights, and pagination info
+        Search response with scored products, sales data, insights, and pagination info
     """
     start_time = time.time()
     llm_call_count = 0
 
-    logger.info(f"Processing search request: {request.query} (page {request.page}, size {request.page_size})")
+    logger.info(
+        f"Processing search request: '{request.query}' "
+        f"(page {request.page}, size {request.page_size}, min_confidence {request.min_confidence})"
+    )
 
-    # Step 1: Parse query with LLM
-    parsed_query = await agent.parse_query(request.query)
+    # Step 1: Parse query with LLM (enhanced with attributes for confidence scoring)
+    parsed_query = await agent.parse_query_with_attributes(request.query)
     llm_call_count += 1
 
-    # Step 2: Search products with pagination
+    # Step 2: Search products with confidence scoring and pagination
     product_service = ProductSearchService(db)
-    products, total_count = product_service.search(
+    products, total_count = product_service.search_with_confidence(
         keywords=parsed_query.get('keywords', []),
+        parsed_query=parsed_query,
         filters=parsed_query.get('filters', {}),
         page=request.page,
-        page_size=request.page_size
+        page_size=request.page_size,
+        min_confidence=request.min_confidence
     )
 
     # Calculate pagination metadata
@@ -153,12 +158,15 @@ async def search_products(
 
     # Step 2b: Get ALL article IDs for analytics (not just current page)
     # This ensures graphs/analytics stay consistent across pagination
+    # Uses confidence filtering to match the displayed products
     all_article_ids = []
     if total_count > 0 and (request.include_sales or request.include_sales_trend or
                              request.include_segments):
-        all_article_ids = product_service.get_all_article_ids(
+        all_article_ids = product_service.get_all_article_ids_with_confidence(
             keywords=parsed_query.get('keywords', []),
-            filters=parsed_query.get('filters', {})
+            parsed_query=parsed_query,
+            filters=parsed_query.get('filters', {}),
+            min_confidence=request.min_confidence
         )
 
     # Step 3: Get sales data if requested (using ALL article IDs)

@@ -1,6 +1,6 @@
 """Response models for API endpoints."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
 
@@ -13,6 +13,12 @@ class Product(BaseModel):
     department: str
     price_range: Optional[str] = None
     image_url: Optional[str] = None
+    confidence_score: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score indicating relevance to search query (0.0 - 1.0)"
+    )
 
 
 class SalesDataPoint(BaseModel):
