@@ -701,7 +701,7 @@ Detailed technical documentation is available in the `documents/` directory:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ---
 
